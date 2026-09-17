@@ -91,6 +91,19 @@ tau2 run --domain airline --agent-llm gpt-4.1 --user-llm gpt-4.1 \
 
 Results are saved to `data/simulations/`. Use `tau2 view` to browse them.
 
+### 4. Browse results with the local Quickview website
+
+From the repository root, start the lightweight local trace viewer:
+
+```bash
+uv run python tools/tau2-viewer/server.py
+```
+
+It opens <http://127.0.0.1:4173> and automatically lists saved runs from
+`data/simulations` in a dropdown. No file upload is required. Click **Refresh
+runs** after a new evaluation finishes. See the [Quickview README](tools/tau2-viewer/README.md)
+for options and data-handling details.
+
 > **Tip**: Run `tau2 intro` for an overview of available domains, commands, and examples.
 
 ## Documentation

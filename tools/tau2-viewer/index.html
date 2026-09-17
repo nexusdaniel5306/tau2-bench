@@ -1,0 +1,1321 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A private, dependency-free local viewer for tau2 simulation results."
+    />
+    <title>tau² Trace Viewer</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2309101d'/%3E%3Cpath d='M15 19h34M32 19v29M20 33h24' stroke='%236ee7f2' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='48' cy='45' r='7' fill='%23f6c85f'/%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --page: #070b12;
+        --panel: #0c1320;
+        --panel-2: #111a29;
+        --panel-3: #172236;
+        --line: #26354d;
+        --line-strong: #3c506e;
+        --text: #eef5ff;
+        --muted: #9bacc2;
+        --cyan: #6ee7f2;
+        --cyan-soft: rgba(110, 231, 242, 0.12);
+        --amber: #f6c85f;
+        --green: #75e6a4;
+        --red: #ff8c8c;
+        --purple: #b8a2ff;
+        --shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 15% -5%, rgba(46, 108, 145, 0.22), transparent 32rem),
+          var(--page);
+        color: var(--text);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      .app-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .topbar {
+        min-height: 72px;
+        padding: 14px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(7, 11, 18, 0.88);
+        backdrop-filter: blur(18px);
+        position: sticky;
+        top: 0;
+        z-index: 20;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand-mark {
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border: 1px solid #347186;
+        border-radius: 12px;
+        background: linear-gradient(145deg, #14283a, #0b1724);
+        color: var(--cyan);
+        font: 700 1.2rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+        box-shadow: inset 0 0 20px rgba(110, 231, 242, 0.08);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 1.02rem;
+        letter-spacing: 0.01em;
+      }
+
+      .brand p {
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 9px;
+      }
+
+      .button {
+        min-height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 14px;
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        background: var(--panel-2);
+        cursor: pointer;
+        font-weight: 680;
+        font-size: 0.9rem;
+        transition: 150ms ease;
+      }
+
+      .button:hover {
+        border-color: var(--cyan);
+        transform: translateY(-1px);
+      }
+
+      .button:focus-visible,
+      .run-select:focus-visible,
+      .run-button:focus-visible,
+      .simulation-button:focus-visible,
+      .filter-button:focus-visible {
+        outline: 3px solid rgba(110, 231, 242, 0.34);
+        outline-offset: 2px;
+      }
+
+      .button.primary {
+        border-color: #4eb4c4;
+        background: var(--cyan);
+        color: #061117;
+      }
+
+      .privacy-note {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .privacy-note strong {
+        color: var(--green);
+      }
+
+      .workspace {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        min-height: 0;
+        border-right: 1px solid var(--line);
+        background: rgba(10, 16, 26, 0.8);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .sidebar-header {
+        padding: 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--cyan);
+        font: 700 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .run-select {
+        width: 100%;
+        min-height: 42px;
+        padding: 9px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #080e18;
+        color: var(--text);
+      }
+
+      .run-select:focus {
+        outline: none;
+        border-color: var(--cyan);
+        box-shadow: 0 0 0 3px var(--cyan-soft);
+      }
+
+      .run-list {
+        padding: 10px;
+        overflow: auto;
+      }
+
+      .run-button {
+        width: 100%;
+        padding: 12px;
+        margin: 0 0 7px;
+        text-align: left;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .run-button:hover {
+        background: var(--panel-2);
+      }
+
+      .run-button.active {
+        border-color: #345b72;
+        background: linear-gradient(90deg, rgba(110, 231, 242, 0.13), rgba(110, 231, 242, 0.03));
+      }
+
+      .run-name {
+        display: block;
+        overflow: hidden;
+        color: var(--text);
+        font-size: 0.88rem;
+        font-weight: 720;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .run-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .mini-score {
+        color: var(--green);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .main {
+        min-width: 0;
+        padding: 24px;
+        overflow: auto;
+      }
+
+      .empty-state {
+        min-height: calc(100vh - 124px);
+        display: grid;
+        place-items: center;
+      }
+
+      .drop-card {
+        width: min(680px, 100%);
+        padding: 42px;
+        border: 1px dashed #3f607a;
+        border-radius: 18px;
+        background: linear-gradient(145deg, rgba(19, 33, 51, 0.78), rgba(10, 17, 29, 0.9));
+        box-shadow: var(--shadow);
+        text-align: center;
+      }
+
+      .drop-icon {
+        width: 70px;
+        height: 70px;
+        margin: 0 auto 20px;
+        display: grid;
+        place-items: center;
+        border-radius: 18px;
+        background: #0b1c2a;
+        border: 1px solid #2d566e;
+        color: var(--cyan);
+        font: 700 1.5rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .drop-card h2 {
+        margin: 0;
+        font-size: clamp(1.5rem, 4vw, 2.3rem);
+        letter-spacing: -0.035em;
+      }
+
+      .drop-card p {
+        margin: 14px auto 24px;
+        max-width: 540px;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.65;
+      }
+
+      .drop-actions {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .error-banner {
+        margin-bottom: 18px;
+        padding: 13px 15px;
+        border: 1px solid rgba(255, 140, 140, 0.45);
+        border-radius: 10px;
+        background: rgba(255, 140, 140, 0.1);
+        color: #ffd4d4;
+        line-height: 1.5;
+      }
+
+      .run-view[hidden],
+      .empty-state[hidden],
+      .error-banner[hidden] {
+        display: none;
+      }
+
+      .run-heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 18px;
+      }
+
+      .run-heading h2 {
+        margin: 0;
+        font-size: clamp(1.45rem, 3vw, 2.2rem);
+        letter-spacing: -0.035em;
+        overflow-wrap: anywhere;
+      }
+
+      .run-heading p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .model-chip {
+        flex: none;
+        padding: 7px 10px;
+        border: 1px solid #36546d;
+        border-radius: 999px;
+        background: #0a1825;
+        color: var(--cyan);
+        font: 650 0.76rem/1.25 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .metric {
+        min-height: 100px;
+        padding: 15px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(145deg, var(--panel-2), #0c1420);
+      }
+
+      .metric-label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 680;
+      }
+
+      .metric-value {
+        display: block;
+        margin-top: 12px;
+        font: 750 1.55rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .content-grid {
+        min-width: 0;
+        display: grid;
+        grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .panel {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(12, 19, 32, 0.92);
+        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.16);
+        overflow: hidden;
+      }
+
+      .panel-header {
+        min-height: 52px;
+        padding: 13px 15px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-header h3 {
+        margin: 0;
+        font-size: 0.9rem;
+      }
+
+      .panel-header span {
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .simulation-list {
+        max-height: calc(100vh - 300px);
+        padding: 8px;
+        overflow: auto;
+      }
+
+      .simulation-button {
+        width: 100%;
+        padding: 11px;
+        margin-bottom: 7px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: transparent;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .simulation-button:hover {
+        background: var(--panel-2);
+      }
+
+      .simulation-button.active {
+        border-color: #3b5d76;
+        background: var(--panel-3);
+      }
+
+      .simulation-title {
+        display: -webkit-box;
+        overflow: hidden;
+        font-size: 0.83rem;
+        font-weight: 670;
+        line-height: 1.35;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .simulation-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+
+      .status {
+        color: var(--amber);
+        font-weight: 750;
+      }
+
+      .status.pass {
+        color: var(--green);
+      }
+
+      .status.fail {
+        color: var(--red);
+      }
+
+      .detail-summary {
+        padding: 16px;
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 0.6fr) minmax(0, 0.7fr);
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .detail-field {
+        min-width: 0;
+      }
+
+      .detail-field dt {
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 650;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .detail-field dd {
+        margin: 5px 0 0;
+        color: var(--text);
+        font-size: 0.84rem;
+        overflow-wrap: anywhere;
+      }
+
+      .score-strip {
+        padding: 12px 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(117, 230, 164, 0.04);
+      }
+
+      .score-chip {
+        padding: 6px 9px;
+        border-radius: 8px;
+        background: #101c29;
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .score-chip strong {
+        color: var(--text);
+      }
+
+      .timeline-toolbar {
+        padding: 11px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .filters {
+        display: flex;
+        gap: 6px;
+      }
+
+      .filter-button {
+        padding: 6px 9px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 0.78rem;
+        font-weight: 680;
+      }
+
+      .filter-button.active {
+        border-color: #36546d;
+        background: #102030;
+        color: var(--cyan);
+      }
+
+      .timeline {
+        padding: 18px;
+      }
+
+      .message {
+        position: relative;
+        padding: 0 0 18px 28px;
+      }
+
+      .message:last-child {
+        padding-bottom: 0;
+      }
+
+      .message::before {
+        content: "";
+        position: absolute;
+        top: 13px;
+        bottom: -4px;
+        left: 7px;
+        width: 1px;
+        background: var(--line);
+      }
+
+      .message:last-child::before {
+        display: none;
+      }
+
+      .message-dot {
+        position: absolute;
+        top: 8px;
+        left: 2px;
+        width: 11px;
+        height: 11px;
+        border: 2px solid var(--panel);
+        border-radius: 50%;
+        background: var(--purple);
+        box-shadow: 0 0 0 1px var(--line-strong);
+      }
+
+      .message.user .message-dot {
+        background: var(--cyan);
+      }
+
+      .message.tool .message-dot,
+      .message.has-tools .message-dot {
+        background: var(--amber);
+      }
+
+      .message-card {
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: #0c1522;
+        overflow: hidden;
+      }
+
+      .message.user .message-card {
+        border-color: #27506a;
+      }
+
+      .message.tool .message-card {
+        border-color: #5a4b2a;
+        background: #17160f;
+      }
+
+      .message-head {
+        min-height: 38px;
+        padding: 8px 11px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid rgba(65, 82, 105, 0.48);
+      }
+
+      .role {
+        color: var(--purple);
+        font: 750 0.73rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+
+      .message.user .role {
+        color: var(--cyan);
+      }
+
+      .message.tool .role {
+        color: var(--amber);
+      }
+
+      .message-stats {
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+
+      .message-body {
+        padding: 12px;
+        color: #dce7f5;
+        font-size: 0.91rem;
+        line-height: 1.58;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .tool-call {
+        margin: 0 12px 12px;
+        border: 1px solid #5a4b2a;
+        border-radius: 9px;
+        background: #15170f;
+      }
+
+      .tool-call summary,
+      .raw-details summary {
+        padding: 9px 11px;
+        cursor: pointer;
+        color: var(--amber);
+        font: 680 0.78rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      pre {
+        margin: 0;
+        padding: 11px;
+        border-top: 1px solid rgba(90, 75, 42, 0.7);
+        color: #cfdaea;
+        font: 0.76rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .raw-details {
+        margin: 0 18px 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #090f18;
+      }
+
+      .raw-details summary {
+        color: var(--muted);
+      }
+
+      .raw-details pre {
+        max-height: 420px;
+        overflow: auto;
+        border-color: var(--line);
+      }
+
+      .small-empty {
+        padding: 28px;
+        color: var(--muted);
+        text-align: center;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 980px) {
+        .workspace {
+          grid-template-columns: 240px minmax(0, 1fr);
+        }
+
+        .metrics,
+        .detail-summary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .content-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .simulation-list {
+          max-height: 260px;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .top-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        .privacy-note {
+          width: 100%;
+        }
+
+        .workspace {
+          display: block;
+        }
+
+        .sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .run-list {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+        }
+
+        .run-button {
+          min-width: 220px;
+        }
+
+        .main {
+          padding: 16px;
+        }
+
+        .run-heading {
+          flex-direction: column;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .drop-card {
+          padding: 28px 18px;
+        }
+      }
+
+      @media (max-width: 440px) {
+        .metrics,
+        .detail-summary {
+          grid-template-columns: 1fr;
+        }
+
+        .button {
+          width: 100%;
+        }
+
+        .timeline-toolbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">τ²</div>
+          <div>
+            <h1>Trace Viewer</h1>
+            <p>Readable local tau² simulations</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span id="data-root" class="privacy-note"><strong>Local only</strong> · reading data/simulations</span>
+          <button id="refresh-runs" class="button primary" type="button">Refresh runs</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar" aria-label="Loaded runs">
+          <div class="sidebar-header">
+            <p class="eyebrow">Runs</p>
+            <label>
+              <span class="sr-only">Select a simulation run</span>
+              <select id="run-select" class="run-select" aria-label="Select a simulation run"></select>
+            </label>
+          </div>
+          <div id="run-list" class="run-list"></div>
+        </aside>
+
+        <main class="main">
+          <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
+          <section id="empty-state" class="empty-state">
+            <div class="drop-card">
+              <div class="drop-icon" aria-hidden="true">{ }</div>
+              <h2>No simulation runs found</h2>
+              <p>
+                The viewer automatically reads <code>data/simulations</code>. Save a tau² run,
+                then use <strong>Refresh runs</strong> to make it appear here.
+              </p>
+            </div>
+          </section>
+
+          <section id="run-view" class="run-view" hidden>
+            <div class="run-heading">
+              <div>
+                <p class="eyebrow">Selected run</p>
+                <h2 id="selected-run-name"></h2>
+                <p id="selected-run-subtitle"></p>
+              </div>
+              <div id="model-chip" class="model-chip"></div>
+            </div>
+
+            <div id="metrics" class="metrics"></div>
+
+            <div class="content-grid">
+              <section class="panel" aria-label="Simulations in selected run">
+                <div class="panel-header">
+                  <h3>Simulations</h3>
+                  <span id="simulation-count"></span>
+                </div>
+                <div id="simulation-list" class="simulation-list"></div>
+              </section>
+
+              <section class="panel" aria-label="Selected simulation detail">
+                <div class="panel-header">
+                  <h3>Trajectory</h3>
+                  <span id="message-count"></span>
+                </div>
+                <dl id="detail-summary" class="detail-summary"></dl>
+                <div id="score-strip" class="score-strip"></div>
+                <div class="timeline-toolbar">
+                  <span id="timeline-label" class="eyebrow">All events</span>
+                  <div class="filters" aria-label="Trajectory filter">
+                    <button class="filter-button active" data-filter="all">All</button>
+                    <button class="filter-button" data-filter="conversation">Conversation</button>
+                    <button class="filter-button" data-filter="tools">Tools</button>
+                  </div>
+                </div>
+                <div id="timeline" class="timeline"></div>
+                <details class="raw-details">
+                  <summary>Raw simulation record</summary>
+                  <pre id="raw-record"></pre>
+                </details>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      "use strict";
+
+      const state = {
+        runs: [],
+        selectedRun: 0,
+        selectedSimulation: 0,
+        messageFilter: "all",
+      };
+
+      const nodes = {
+        runSelect: document.querySelector("#run-select"),
+        refreshRuns: document.querySelector("#refresh-runs"),
+        dataRoot: document.querySelector("#data-root"),
+        runList: document.querySelector("#run-list"),
+        emptyState: document.querySelector("#empty-state"),
+        runView: document.querySelector("#run-view"),
+        errorBanner: document.querySelector("#error-banner"),
+        selectedRunName: document.querySelector("#selected-run-name"),
+        selectedRunSubtitle: document.querySelector("#selected-run-subtitle"),
+        modelChip: document.querySelector("#model-chip"),
+        metrics: document.querySelector("#metrics"),
+        simulationCount: document.querySelector("#simulation-count"),
+        simulationList: document.querySelector("#simulation-list"),
+        messageCount: document.querySelector("#message-count"),
+        detailSummary: document.querySelector("#detail-summary"),
+        scoreStrip: document.querySelector("#score-strip"),
+        timelineLabel: document.querySelector("#timeline-label"),
+        timeline: document.querySelector("#timeline"),
+        rawRecord: document.querySelector("#raw-record"),
+      };
+
+      function make(tag, className, text) {
+        const element = document.createElement(tag);
+        if (className) element.className = className;
+        if (text !== undefined && text !== null) element.textContent = String(text);
+        return element;
+      }
+
+      function formatNumber(value, digits = 0) {
+        const number = Number(value);
+        return Number.isFinite(number)
+          ? number.toLocaleString(undefined, {
+              minimumFractionDigits: digits,
+              maximumFractionDigits: digits,
+            })
+          : "—";
+      }
+
+      function formatCost(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "—";
+        return number === 0 ? "$0" : `$${number.toFixed(number < 0.01 ? 4 : 2)}`;
+      }
+
+      function formatDuration(seconds) {
+        const value = Number(seconds);
+        if (!Number.isFinite(value)) return "—";
+        if (value < 60) return `${value.toFixed(1)}s`;
+        const minutes = Math.floor(value / 60);
+        return `${minutes}m ${Math.round(value % 60)}s`;
+      }
+
+      function formatDate(value) {
+        if (!value) return "Unknown date";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+      }
+
+      function rewardOf(simulation) {
+        const reward = simulation?.reward_info?.reward;
+        return Number.isFinite(Number(reward)) ? Number(reward) : null;
+      }
+
+      function totalCost(simulation) {
+        return Number(simulation?.agent_cost || 0) + Number(simulation?.user_cost || 0);
+      }
+
+      function toolEvent(message) {
+        return message?.role === "tool" || (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0);
+      }
+
+      function prettyContent(content) {
+        if (typeof content !== "string") return content == null ? "" : JSON.stringify(content, null, 2);
+        try {
+          return JSON.stringify(JSON.parse(content), null, 2);
+        } catch {
+          return content;
+        }
+      }
+
+      function showError(message) {
+        nodes.errorBanner.textContent = message;
+        nodes.errorBanner.hidden = false;
+      }
+
+      function clearError() {
+        nodes.errorBanner.hidden = true;
+        nodes.errorBanner.textContent = "";
+      }
+
+      async function fetchJson(url) {
+        const response = await fetch(url, { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+        return payload;
+      }
+
+      function renderRunSelect() {
+        nodes.runSelect.replaceChildren();
+        if (!state.runs.length) {
+          const option = make("option", "", "No saved runs found");
+          option.value = "";
+          nodes.runSelect.append(option);
+          nodes.runSelect.disabled = true;
+          return;
+        }
+
+        nodes.runSelect.disabled = false;
+        state.runs.forEach((run) => {
+          const option = make(
+            "option",
+            "",
+            `${run.name} · ${run.simulation_count} simulation${run.simulation_count === 1 ? "" : "s"}`,
+          );
+          option.value = run.id;
+          nodes.runSelect.append(option);
+        });
+        nodes.runSelect.value = state.runs[state.selectedRun]?.id || state.runs[0].id;
+      }
+
+      async function loadSelectedRun(index) {
+        clearError();
+        const run = state.runs[index];
+        if (!run) return;
+        state.selectedRun = index;
+        state.selectedSimulation = 0;
+        nodes.runSelect.value = run.id;
+        renderRunList();
+        try {
+          run.data = await fetchJson(`/api/runs/${encodeURIComponent(run.id)}`);
+          render();
+        } catch (error) {
+          showError(`Could not load ${run.name}: ${error.message}`);
+        }
+      }
+
+      async function loadRunIndex() {
+        const selectedId = state.runs[state.selectedRun]?.id;
+        clearError();
+        nodes.refreshRuns.disabled = true;
+        nodes.refreshRuns.textContent = "Refreshing…";
+        try {
+          const payload = await fetchJson("/api/runs");
+          state.runs = payload.runs;
+          state.selectedRun = Math.max(
+            0,
+            state.runs.findIndex((run) => run.id === selectedId),
+          );
+          state.selectedSimulation = 0;
+          nodes.dataRoot.textContent = `Local only · ${payload.root}`;
+          renderRunSelect();
+          render();
+          if (state.runs.length) await loadSelectedRun(state.selectedRun);
+        } catch (error) {
+          state.runs = [];
+          renderRunSelect();
+          render();
+          showError(`Could not read saved simulations: ${error.message}`);
+        } finally {
+          nodes.refreshRuns.disabled = false;
+          nodes.refreshRuns.textContent = "Refresh runs";
+        }
+      }
+
+      function render() {
+        const hasRuns = state.runs.length > 0;
+        nodes.emptyState.hidden = hasRuns;
+        nodes.runView.hidden = !hasRuns;
+        renderRunSelect();
+        renderRunList();
+        if (hasRuns && state.runs[state.selectedRun]?.data) renderSelectedRun();
+      }
+
+      function runSummary(run) {
+        if (!run.data) {
+          return {
+            simulations: [],
+            rewards: [],
+            passed: null,
+            passRate: run.pass_rate,
+            simulationCount: run.simulation_count,
+          };
+        }
+        const simulations = run.data.simulations || [];
+        const rewards = simulations.map(rewardOf).filter((value) => value !== null);
+        const passed = rewards.filter((value) => value === 1).length;
+        const passRate = rewards.length ? passed / rewards.length : null;
+        return { simulations, rewards, passed, passRate, simulationCount: simulations.length };
+      }
+
+      function renderRunList() {
+        nodes.runList.replaceChildren();
+
+        state.runs.forEach((run, index) => {
+          const summary = runSummary(run);
+          const button = make("button", `run-button${index === state.selectedRun ? " active" : ""}`);
+          button.type = "button";
+          button.addEventListener("click", () => loadSelectedRun(index));
+          button.append(make("span", "run-name", run.name));
+          const meta = make("span", "run-meta");
+          meta.append(
+            make("span", "", `${summary.simulationCount} simulation${summary.simulationCount === 1 ? "" : "s"}`),
+            make("span", "mini-score", summary.passRate === null ? "—" : `${Math.round(summary.passRate * 100)}% pass`),
+          );
+          button.append(meta);
+          nodes.runList.append(button);
+        });
+      }
+
+      function metric(label, value) {
+        const card = make("div", "metric");
+        card.append(make("span", "metric-label", label), make("strong", "metric-value", value));
+        return card;
+      }
+
+      function renderSelectedRun() {
+        const run = state.runs[state.selectedRun];
+        if (!run) return;
+        const summary = runSummary(run);
+        const info = run.data.info || {};
+        const model = info.agent_info?.llm || "Unknown model";
+        const durations = summary.simulations.map((sim) => Number(sim.duration)).filter(Number.isFinite);
+        const averageDuration = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
+        const total = summary.simulations.reduce((sum, sim) => sum + totalCost(sim), 0);
+
+        nodes.selectedRunName.textContent = run.name;
+        nodes.selectedRunSubtitle.textContent = `${formatDate(run.data.timestamp)} · ${info.environment_info?.domain_name || "unknown domain"} · data/simulations/${run.id}/results.json`;
+        nodes.modelChip.textContent = model;
+        nodes.metrics.replaceChildren(
+          metric("Simulations", summary.simulations.length),
+          metric("Pass rate", summary.passRate === null ? "—" : `${Math.round(summary.passRate * 100)}%`),
+          metric("Average runtime", formatDuration(averageDuration)),
+          metric("Total reported cost", formatCost(total)),
+        );
+
+        nodes.simulationCount.textContent = `${summary.simulations.length} total`;
+        renderSimulationList(summary.simulations);
+        renderSimulation(summary.simulations[state.selectedSimulation]);
+      }
+
+      function simulationLabel(simulation) {
+        const id = simulation?.task_id || simulation?.id || "Untitled simulation";
+        return String(id).replace(/\[PERSONA:[^\]]*\]/g, "");
+      }
+
+      function rewardStatus(reward) {
+        if (reward === 1) return { label: "Pass", className: "pass" };
+        if (reward === 0) return { label: "Fail", className: "fail" };
+        if (reward === null) return { label: "Unscored", className: "" };
+        return { label: reward.toFixed(2), className: "" };
+      }
+
+      function renderSimulationList(simulations) {
+        nodes.simulationList.replaceChildren();
+        if (!simulations.length) {
+          nodes.simulationList.append(make("div", "small-empty", "This results file contains no inline simulations."));
+          return;
+        }
+
+        simulations.forEach((simulation, index) => {
+          const reward = rewardOf(simulation);
+          const status = rewardStatus(reward);
+          const button = make("button", `simulation-button${index === state.selectedSimulation ? " active" : ""}`);
+          button.type = "button";
+          button.addEventListener("click", () => {
+            state.selectedSimulation = index;
+            renderSelectedRun();
+          });
+          button.append(make("span", "simulation-title", simulationLabel(simulation)));
+          const meta = make("span", "simulation-meta");
+          meta.append(
+            make("span", "", `Trial ${simulation.trial ?? "—"}`),
+            make("span", `status ${status.className}`, status.label),
+          );
+          button.append(meta);
+          nodes.simulationList.append(button);
+        });
+      }
+
+      function detailField(label, value) {
+        const wrapper = make("div", "detail-field");
+        wrapper.append(make("dt", "", label), make("dd", "", value));
+        return wrapper;
+      }
+
+      function scoreChip(label, value) {
+        const chip = make("span", "score-chip");
+        chip.append(`${label} `, make("strong", "", value));
+        return chip;
+      }
+
+      function renderSimulation(simulation) {
+        if (!simulation) {
+          nodes.detailSummary.replaceChildren();
+          nodes.scoreStrip.replaceChildren();
+          nodes.timeline.replaceChildren(make("div", "small-empty", "Select a simulation to inspect it."));
+          nodes.messageCount.textContent = "0 events";
+          nodes.rawRecord.textContent = "";
+          return;
+        }
+
+        const messages = simulation.messages || [];
+        const reward = rewardOf(simulation);
+        const rewardInfo = simulation.reward_info || {};
+        const actionChecks = rewardInfo.action_checks || [];
+        const actionsPassed = actionChecks.filter((item) => item.action_match).length;
+        const assertions = rewardInfo.env_assertions || [];
+        const assertionsPassed = assertions.filter((item) => item.met).length;
+
+        nodes.messageCount.textContent = `${messages.length} event${messages.length === 1 ? "" : "s"}`;
+        nodes.detailSummary.replaceChildren(
+          detailField("Task", simulationLabel(simulation)),
+          detailField("Simulation ID", simulation.id || "—"),
+          detailField("Runtime", formatDuration(simulation.duration)),
+          detailField("Termination", simulation.termination_reason || "—"),
+        );
+        nodes.scoreStrip.replaceChildren(
+          scoreChip("Reward", reward === null ? "—" : reward.toFixed(2)),
+          scoreChip("DB match", rewardInfo.db_check?.db_match === true ? "Passed" : rewardInfo.db_check ? "Failed" : "—"),
+          scoreChip("Actions", actionChecks.length ? `${actionsPassed}/${actionChecks.length}` : "—"),
+          scoreChip("Assertions", assertions.length ? `${assertionsPassed}/${assertions.length}` : "—"),
+          scoreChip("Cost", formatCost(totalCost(simulation))),
+        );
+        nodes.rawRecord.textContent = JSON.stringify(simulation, null, 2);
+        renderTimeline(messages);
+      }
+
+      function messageStats(message) {
+        const parts = [`Turn ${message.turn_idx ?? "—"}`];
+        const usage = message.usage || {};
+        const tokens = Number(usage.prompt_tokens || 0) + Number(usage.completion_tokens || 0);
+        if (tokens) parts.push(`${formatNumber(tokens)} tokens`);
+        if (message.generation_time_seconds) parts.push(formatDuration(message.generation_time_seconds));
+        return parts.join(" · ");
+      }
+
+      function renderToolCall(toolCall) {
+        const details = make("details", "tool-call");
+        details.open = true;
+        details.append(
+          make("summary", "", `${toolCall.requestor || "agent"} → ${toolCall.name || "tool"}`),
+          make("pre", "", JSON.stringify(toolCall.arguments || {}, null, 2)),
+        );
+        return details;
+      }
+
+      function renderMessage(message) {
+        const role = message.role || "event";
+        const hasTools = toolEvent(message);
+        const wrapper = make("article", `message ${role}${hasTools ? " has-tools" : ""}`);
+        wrapper.append(make("span", "message-dot"));
+        const card = make("div", "message-card");
+        const head = make("div", "message-head");
+        head.append(make("span", "role", role), make("span", "message-stats", messageStats(message)));
+        card.append(head);
+
+        if (message.content) card.append(make("div", "message-body", prettyContent(message.content)));
+        for (const toolCall of message.tool_calls || []) card.append(renderToolCall(toolCall));
+        if (!message.content && !(message.tool_calls || []).length) {
+          card.append(make("div", "message-body", "No displayable content"));
+        }
+        wrapper.append(card);
+        return wrapper;
+      }
+
+      function renderTimeline(messages) {
+        const filtered = messages.filter((message) => {
+          if (state.messageFilter === "tools") return toolEvent(message);
+          if (state.messageFilter === "conversation") return !toolEvent(message);
+          return true;
+        });
+
+        const labels = { all: "All events", conversation: "Conversation", tools: "Tool activity" };
+        nodes.timelineLabel.textContent = labels[state.messageFilter];
+        nodes.timeline.replaceChildren();
+        if (!filtered.length) {
+          nodes.timeline.append(make("div", "small-empty", "No trajectory events match this filter."));
+          return;
+        }
+        for (const message of filtered) nodes.timeline.append(renderMessage(message));
+      }
+
+      function setFilter(filter) {
+        state.messageFilter = filter;
+        document.querySelectorAll(".filter-button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.filter === filter);
+        });
+        const run = state.runs[state.selectedRun];
+        const simulation = run?.data?.simulations?.[state.selectedSimulation];
+        renderTimeline(simulation?.messages || []);
+      }
+
+      nodes.runSelect.addEventListener("change", () => {
+        const index = state.runs.findIndex((run) => run.id === nodes.runSelect.value);
+        if (index >= 0) loadSelectedRun(index);
+      });
+      nodes.refreshRuns.addEventListener("click", loadRunIndex);
+      document.querySelectorAll(".filter-button").forEach((button) => {
+        button.addEventListener("click", () => setFilter(button.dataset.filter));
+      });
+
+      loadRunIndex();
+    </script>
+  </body>
+</html>
