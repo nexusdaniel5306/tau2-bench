@@ -33,6 +33,7 @@ dependencies = [
     "requests>=2.31.0",
     "numpy>=1.24.0",
     "httpx>=0.24.0",
+    "websockets>=13.0",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +73,10 @@ dev = [
     "pytest-xdist>=3.5.0",
     "ruff>=0.9.1",
     "pre-commit>=4.0.0",
+]
+tracing = [
+    "opentelemetry-sdk>=1.39,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.39,<2",
 ]
 experiments = [
     "plotly>=6.0.0",

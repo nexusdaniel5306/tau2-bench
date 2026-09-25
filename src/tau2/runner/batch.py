@@ -420,7 +420,10 @@ def run_single_task(
         # Layer 1: Run the simulation
         env_kwargs = _build_env_kwargs(config, task) or None
         simulation = run_simulation(
-            orchestrator, evaluation_type=evaluation_type, env_kwargs=env_kwargs
+            orchestrator,
+            evaluation_type=evaluation_type,
+            env_kwargs=env_kwargs,
+            run_id=save_dir.name if save_dir else config.save_to,
         )
 
         # Side effects

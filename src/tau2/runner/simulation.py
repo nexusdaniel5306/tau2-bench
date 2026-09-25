@@ -14,6 +14,7 @@ from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
 from tau2.orchestrator.full_duplex_orchestrator import FullDuplexOrchestrator
 from tau2.orchestrator.modes import CommunicationMode
 from tau2.orchestrator.orchestrator import Orchestrator
+from tau2.utils.tracing import set_output, simulation_span, trace_id
 
 
 def run_simulation(
@@ -21,6 +22,7 @@ def run_simulation(
     *,
     evaluation_type: EvaluationType = EvaluationType.ALL,
     env_kwargs: Optional[dict] = None,
+    run_id: Optional[str] = None,
 ) -> SimulationRun:
     """Run a simulation and evaluate the result.
 
@@ -55,34 +57,55 @@ def run_simulation(
         result = run_simulation(orchestrator)
         print(result.reward_info.reward)
     """
-    # Run the orchestrator
-    simulation = orchestrator.run()
-
-    # Save the actual policy used for this simulation
-    simulation.policy = orchestrator.environment.get_policy()
-
-    # Extract context from the orchestrator -- no external params needed
     domain = orchestrator.environment.get_domain_name()
     task = orchestrator.task
-    is_full_duplex = isinstance(orchestrator, FullDuplexOrchestrator)
-    mode = (
-        CommunicationMode.FULL_DUPLEX
-        if is_full_duplex
-        else CommunicationMode.HALF_DUPLEX
-    )
-    solo_mode = getattr(orchestrator, "solo_mode", False)
+    with simulation_span(
+        run_id or orchestrator.simulation_id,
+        orchestrator.simulation_id,
+        task.id,
+        domain,
+    ) as span:
+        simulation = orchestrator.run()
+        simulation.policy = orchestrator.environment.get_policy()
 
-    # Evaluate
-    reward_info = evaluate_simulation(
-        simulation=simulation,
-        task=task,
-        evaluation_type=evaluation_type,
-        solo_mode=solo_mode,
-        domain=domain,
-        mode=mode,
-        env_kwargs=env_kwargs,
-    )
-    simulation.reward_info = reward_info
+        mode = (
+            CommunicationMode.FULL_DUPLEX
+            if isinstance(orchestrator, FullDuplexOrchestrator)
+            else CommunicationMode.HALF_DUPLEX
+        )
+        reward_info = evaluate_simulation(
+            simulation=simulation,
+            task=task,
+            evaluation_type=evaluation_type,
+            solo_mode=getattr(orchestrator, "solo_mode", False),
+            domain=domain,
+            mode=mode,
+            env_kwargs=env_kwargs,
+        )
+        simulation.reward_info = reward_info
+        if span is not None:
+            span.set_attribute("tau2.reward", reward_info.reward)
+            span.set_attribute(
+                "tau2.termination_reason", simulation.termination_reason.value
+            )
+            span.set_attribute("tau2.duration_seconds", simulation.duration)
+            if simulation.agent_cost is not None:
+                span.set_attribute("tau2.agent_cost_usd", simulation.agent_cost)
+            if simulation.user_cost is not None:
+                span.set_attribute("tau2.user_cost_usd", simulation.user_cost)
+            simulation.info = {
+                **(simulation.info or {}),
+                "otel_trace_id": trace_id(span),
+            }
+        set_output(
+            span,
+            {
+                "reward": reward_info.reward,
+                "termination_reason": simulation.termination_reason.value,
+                "agent_cost_usd": simulation.agent_cost,
+                "user_cost_usd": simulation.user_cost,
+            },
+        )
 
     logger.info(
         f"Simulation complete: domain={domain}, task={task.id}, "

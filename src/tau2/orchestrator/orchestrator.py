@@ -35,6 +35,7 @@ from tau2.user.user_simulator_base import (
     is_valid_user_history_message,
 )
 from tau2.utils.llm_utils import get_cost
+from tau2.utils.tracing import set_output, start_span
 from tau2.utils.utils import format_time, get_now
 
 
@@ -277,8 +278,12 @@ class BaseOrchestrator(ABC, Generic[BaseAgentT, BaseUserT, TrajectoryItemT]):
         finalized = False
         try:
             while not self.done:
-                self.step()
-                self._check_termination()
+                with start_span(
+                    "tau2.step", "CHAIN", input_value={"step": self.step_count}
+                ) as span:
+                    self.step()
+                    self._check_termination()
+                    set_output(span, {"step": self.step_count, "done": self.done})
             result = self._finalize()
             finalized = True
             return result
@@ -322,10 +327,24 @@ class BaseOrchestrator(ABC, Generic[BaseAgentT, BaseUserT, TrajectoryItemT]):
         """
         tool_results = []
         for tool_call in tool_calls:
-            tool_result = self.environment.get_response(tool_call)
-            if tool_result.error:
-                self.num_errors += 1
-            tool_results.append(tool_result)
+            with start_span(
+                tool_call.name,
+                "TOOL",
+                input_value=tool_call.arguments,
+            ) as span:
+                if span is not None:
+                    span.set_attribute("tool.name", tool_call.name)
+                    span.set_attribute("tau2.tool_call_id", tool_call.id)
+                    span.set_attribute("tau2.requestor", tool_call.requestor)
+                tool_result = self.environment.get_response(tool_call)
+                if tool_result.error:
+                    self.num_errors += 1
+                    if span is not None:
+                        span.set_attribute("tau2.tool_error", True)
+                set_output(
+                    span, {"content": tool_result.content, "error": tool_result.error}
+                )
+                tool_results.append(tool_result)
         return tool_results
 
     def _wrap_tool_results(self, tool_results: list[ToolMessage]) -> Message:
@@ -855,9 +874,17 @@ class Orchestrator(BaseOrchestrator[AgentT, UserT, Message]):
         elif (
             self.from_role == Role.USER or self.from_role == Role.ENV
         ) and self.to_role == Role.AGENT:
-            agent_msg, self.agent_state = self.agent.generate_next_message(
-                self.message, self.agent_state
-            )
+            with start_span(
+                "tau2.agent_step",
+                "AGENT",
+                input_value=self.message.model_dump(mode="json")
+                if self.message
+                else None,
+            ) as span:
+                agent_msg, self.agent_state = self.agent.generate_next_message(
+                    self.message, self.agent_state
+                )
+                set_output(span, agent_msg.model_dump(mode="json"))
             agent_msg.validate()
             if self.agent.is_stop(agent_msg):
                 self.done = True
