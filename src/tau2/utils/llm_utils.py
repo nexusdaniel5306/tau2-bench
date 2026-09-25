@@ -39,6 +39,7 @@ from tau2.data_model.message import (
     UserMessage,
 )
 from tau2.environment.tool import Tool
+from tau2.utils.tracing import set_output, start_span
 
 # Suppress Pydantic serialization warnings from LiteLLM
 # These occur due to type mismatches between streaming and non-streaming response types
@@ -404,21 +405,41 @@ def generate(
     }
     request_timestamp = datetime.now().isoformat()
 
-    start_time = time.perf_counter()
-    try:
-        response = completion(
-            model=model,
-            messages=litellm_messages,
-            tools=tools_schema,
-            tool_choice=tool_choice,
-            **kwargs,
-        )
-    except Exception as e:
-        logger.error(e)
-        raise e
-    generation_time_seconds = time.perf_counter() - start_time
-    cost = get_response_cost(response)
-    usage = get_response_usage(response)
+    with start_span(
+        call_name or "litellm.completion",
+        "LLM",
+        input_value={"messages": litellm_messages, "tools": tools_schema},
+    ) as span:
+        if span is not None:
+            span.set_attribute("llm.system", "litellm")
+            span.set_attribute("llm.model_name", model)
+        start_time = time.perf_counter()
+        try:
+            response = completion(
+                model=model,
+                messages=litellm_messages,
+                tools=tools_schema,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
+        except Exception as e:
+            logger.error(e)
+            raise e
+        generation_time_seconds = time.perf_counter() - start_time
+        cost = get_response_cost(response)
+        usage = get_response_usage(response)
+        if span is not None:
+            span.set_attribute("gen_ai.usage.cost", cost)
+            if usage is not None:
+                span.set_attribute("llm.token_count.prompt", usage["prompt_tokens"])
+                span.set_attribute(
+                    "llm.token_count.completion", usage["completion_tokens"]
+                )
+                span.set_attribute(
+                    "llm.token_count.total",
+                    usage["prompt_tokens"] + usage["completion_tokens"],
+                )
+            set_output(span, response.choices[0].message.model_dump(mode="json"))
 
     response_choice = response.choices[0]
     try:

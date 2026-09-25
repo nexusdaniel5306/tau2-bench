@@ -2910,6 +2910,7 @@ dependencies = [
     { name = "toml" },
     { name = "typer" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 
 [package.optional-dependencies]
@@ -2985,6 +2986,10 @@ live = [
     { name = "tqdm" },
     { name = "websockets" },
 ]
+tracing = [
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+]
 voice = [
     { name = "aiohttp" },
     { name = "aws-sdk-bedrock-runtime" },
@@ -3032,6 +3037,8 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'experiments'", specifier = ">=3.10.1" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "openai", marker = "extra == 'knowledge'", specifier = ">=1.0.0" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'tracing'", specifier = ">=1.39,<2" },
+    { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.39,<2" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "plotly", marker = "extra == 'experiments'", specifier = ">=6.0.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.0" },
@@ -3057,9 +3064,10 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'voice'", specifier = ">=4.0" },
     { name = "typer", specifier = ">=0.12.5" },
     { name = "uvicorn", specifier = ">=0.34.0" },
+    { name = "websockets", specifier = ">=13.0" },
     { name = "websockets", marker = "extra == 'voice'", specifier = ">=13.0" },
 ]
-provides-extras = ["live", "voice", "knowledge", "gym", "dev", "experiments", "all"]
+provides-extras = ["live", "voice", "knowledge", "gym", "dev", "tracing", "experiments", "all"]
 
 [[package]]
 name = "tenacity"
